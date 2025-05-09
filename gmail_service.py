@@ -32,9 +32,37 @@ class GmailService:
             if creds and creds.expired and creds.refresh_token:
                 creds.refresh(Request())
             else:
+                # Use a redirect URI that works in Replit
                 flow = InstalledAppFlow.from_client_secrets_file(
-                    self.credentials_path, self.SCOPES)
-                creds = flow.run_local_server(port=0)
+                    self.credentials_path, self.SCOPES,
+                    redirect_uri='urn:ietf:wg:oauth:2.0:oob')
+                
+                # Get the authorization URL
+                auth_url, _ = flow.authorization_url(
+                    access_type='offline',
+                    include_granted_scopes='true')
+                
+                # Prompt the user to go to the URL and enter the authorization code
+                import streamlit as st
+                st.markdown(f"""
+                ## Gmail Authorization Required
+                
+                1. Click the link below to authorize this app:
+                2. [Open Google Authorization Page]({auth_url})
+                3. Log in with your Google account
+                4. Grant the requested permissions
+                5. Copy the authorization code provided
+                6. Paste it in the box below
+                """)
+                
+                auth_code = st.text_input("Enter the authorization code:", key="auth_code")
+                
+                if not auth_code:
+                    st.stop()  # Stop execution until code is provided
+                
+                # Exchange authorization code for credentials
+                flow.fetch_token(code=auth_code)
+                creds = flow.credentials
             
             # Save credentials for future use
             with open(token_path, 'wb') as token:
