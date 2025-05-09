@@ -1,9 +1,10 @@
 import os
 import streamlit as st
 import time
+import json
 from gmail_service import GmailService
 from rag_engine import RAGEngine
-from utils import save_uploaded_file
+from utils import save_uploaded_file, get_sample_emails
 
 st.set_page_config(
     page_title="Gmail RAG Assistant",
@@ -67,7 +68,32 @@ with st.sidebar:
         st.write("Upload your Google API credentials file to connect to Gmail:")
         credentials_file = st.file_uploader("Upload credentials.json", type=["json"])
         
-        if credentials_file is not None:
+        # Option to use demo mode with sample data
+        use_demo = st.checkbox("Use demo mode with sample data")
+        
+        if use_demo:
+            if st.button("Connect with Sample Data"):
+                try:
+                    # Initialize RAG engine with sample email data
+                    st.session_state.authenticated = True
+                    st.session_state.messages.append(
+                        {"role": "assistant", "content": "Connected in demo mode with sample email data. You can now ask questions about the sample emails!"}
+                    )
+                    
+                    # Get sample emails and set up RAG engine directly
+                    sample_emails = get_sample_emails()
+                    st.session_state.rag_engine = RAGEngine(None)  # No Gmail service in demo mode
+                    st.session_state.rag_engine.emails = sample_emails
+                    
+                    # Create a FAISS index with the sample emails
+                    st.session_state.rag_engine._create_index_from_samples(sample_emails)
+                    st.session_state.email_count = len(sample_emails)
+                    
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Failed to initialize demo mode: {str(e)}")
+        
+        elif credentials_file is not None:
             # Save the uploaded credentials file
             save_uploaded_file(credentials_file, "credentials.json")
             

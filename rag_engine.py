@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class RAGEngine:
-    def __init__(self, gmail_service):
+    def __init__(self, gmail_service=None):
         """Initialize the RAG Engine with Gmail service and OpenAI integration."""
         self.gmail_service = gmail_service
         self.api_key = os.getenv('OPENAI_API_KEY')
@@ -26,9 +26,11 @@ class RAGEngine:
         self.emails = []
         self.index_file = "email_index.index"
         self.emails_file = "emails_data.json"
+        self.is_demo_mode = gmail_service is None
         
-        # Load existing index if available
-        self._load_index()
+        # Load existing index if available and not in demo mode
+        if not self.is_demo_mode:
+            self._load_index()
     
     def _get_embedding(self, text):
         """Generate embedding for text using OpenAI API."""
@@ -69,6 +71,10 @@ class RAGEngine:
         if len(self.emails) > 0 and not force_refresh:
             return len(self.emails)
         
+        # Don't proceed if in demo mode or if Gmail service is not available
+        if self.is_demo_mode or self.gmail_service is None:
+            return len(self.emails)
+        
         # Clear existing index if forcing refresh
         if force_refresh:
             self.index = faiss.IndexFlatL2(self.dimension)
@@ -86,8 +92,9 @@ class RAGEngine:
             embedding = self._get_embedding(email_text)
             
             # Add to FAISS index
-            faiss.normalize_L2(np.array([embedding], dtype=np.float32))
-            self.index.add(np.array([embedding], dtype=np.float32))
+            embedding_array = np.array([embedding], dtype=np.float32)
+            faiss.normalize_L2(embedding_array)
+            self.index.add(embedding_array)
             
             # Store email data without HTML content to save space
             email_data = {
@@ -106,6 +113,26 @@ class RAGEngine:
         self._save_index()
         
         return len(self.emails)
+    
+    def _create_index_from_samples(self, sample_emails):
+        """Create FAISS index from sample emails for demo mode."""
+        # Clear any existing index
+        self.index = faiss.IndexFlatL2(self.dimension)
+        
+        # Process and index each sample email
+        for email in sample_emails:
+            # Create document for indexing
+            email_text = f"Subject: {email['subject']}\nFrom: {email['sender']}\nDate: {email['date']}\n\n{email['body_text']}"
+            
+            # Get embedding
+            embedding = self._get_embedding(email_text)
+            
+            # Add to FAISS index
+            embedding_array = np.array([embedding], dtype=np.float32)
+            faiss.normalize_L2(embedding_array)
+            self.index.add(embedding_array)
+        
+        return len(sample_emails)
     
     def _search_similar_emails(self, query, top_k=5):
         """Search for emails similar to the query."""
