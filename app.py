@@ -47,15 +47,31 @@ def authenticate_gmail():
         
         # Fetch and index emails
         with st.spinner("Indexing your emails... This may take a few minutes depending on your inbox size."):
-            email_count = st.session_state.rag_engine.index_emails(limit=100)  # Index the most recent 100 emails
-            st.session_state.email_count = email_count
-            
-        st.session_state.messages.append(
-            {"role": "assistant", "content": f"Indexed {email_count} emails. You can now ask questions about your emails!"}
-        )
+            try:
+                email_count = st.session_state.rag_engine.index_emails(limit=100)  # Index the most recent 100 emails
+                st.session_state.email_count = email_count
+                
+                if email_count > 0:
+                    st.session_state.messages.append(
+                        {"role": "assistant", "content": f"Indexed {email_count} emails. You can now ask questions about your emails!"}
+                    )
+                else:
+                    st.session_state.messages.append(
+                        {"role": "assistant", "content": "No emails were found or indexed. Please check your Gmail account and try again."}
+                    )
+            except Exception as e:
+                st.error(f"Error indexing emails: {str(e)}")
+                import traceback
+                st.code(traceback.format_exc())
+                st.session_state.messages.append(
+                    {"role": "assistant", "content": f"There was an error indexing your emails: {str(e)}. You may still try asking questions, but results might be limited."}
+                )
+        
         st.rerun()
     except Exception as e:
         st.error(f"Authentication failed: {str(e)}")
+        import traceback
+        st.code(traceback.format_exc())
 
 # Main app layout
 st.title("📬 Gmail RAG Assistant")
@@ -81,13 +97,19 @@ with st.sidebar:
                     )
                     
                     # Get sample emails and set up RAG engine directly
-                    sample_emails = get_sample_emails()
-                    st.session_state.rag_engine = RAGEngine(None)  # No Gmail service in demo mode
-                    st.session_state.rag_engine.emails = sample_emails
-                    
-                    # Create a FAISS index with the sample emails
-                    st.session_state.rag_engine._create_index_from_samples(sample_emails)
-                    st.session_state.email_count = len(sample_emails)
+                    try:
+                        sample_emails = get_sample_emails()
+                        st.session_state.rag_engine = RAGEngine(None)  # No Gmail service in demo mode
+                        st.session_state.rag_engine.emails = sample_emails
+                        
+                        # Create a FAISS index with the sample emails
+                        email_count = st.session_state.rag_engine._create_index_from_samples(sample_emails)
+                        st.session_state.email_count = email_count
+                        st.success(f"Successfully loaded {email_count} sample emails for demo mode")
+                    except Exception as e:
+                        st.error(f"Error setting up demo mode: {str(e)}")
+                        import traceback
+                        st.code(traceback.format_exc())
                     
                     st.rerun()
                 except Exception as e:
@@ -137,9 +159,16 @@ with st.sidebar:
         if st.button(q):
             st.session_state.messages.append({"role": "user", "content": q})
             if st.session_state.authenticated and st.session_state.rag_engine:
-                with st.spinner("Thinking..."):
-                    response = st.session_state.rag_engine.query(q)
-                st.session_state.messages.append({"role": "assistant", "content": response})
+                try:
+                    with st.spinner("Thinking..."):
+                        response = st.session_state.rag_engine.query(q)
+                    st.session_state.messages.append({"role": "assistant", "content": response})
+                except Exception as e:
+                    error_msg = f"Error processing query: {str(e)}"
+                    st.error(error_msg)
+                    import traceback
+                    st.code(traceback.format_exc())
+                    st.session_state.messages.append({"role": "assistant", "content": error_msg})
             else:
                 st.session_state.messages.append(
                     {"role": "assistant", "content": "Please connect to Gmail first!"}
@@ -160,9 +189,16 @@ if prompt := st.chat_input("Ask a question about your emails..."):
     
     # Only process if authenticated
     if st.session_state.authenticated and st.session_state.rag_engine:
-        with st.spinner("Searching your emails..."):
-            response = st.session_state.rag_engine.query(prompt)
-        st.session_state.messages.append({"role": "assistant", "content": response})
+        try:
+            with st.spinner("Searching your emails..."):
+                response = st.session_state.rag_engine.query(prompt)
+            st.session_state.messages.append({"role": "assistant", "content": response})
+        except Exception as e:
+            error_msg = f"Error processing query: {str(e)}"
+            st.error(error_msg)
+            import traceback
+            st.code(traceback.format_exc())
+            st.session_state.messages.append({"role": "assistant", "content": error_msg})
     else:
         st.session_state.messages.append(
             {"role": "assistant", "content": "Please connect to Gmail first by uploading your credentials.json file in the sidebar!"}

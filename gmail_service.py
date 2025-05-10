@@ -40,7 +40,8 @@ class GmailService:
                 # Get the authorization URL
                 auth_url, _ = flow.authorization_url(
                     access_type='offline',
-                    include_granted_scopes='true')
+                    include_granted_scopes='true',
+                    prompt='consent')
                 
                 # Prompt the user to go to the URL and enter the authorization code
                 import streamlit as st
@@ -94,15 +95,30 @@ class GmailService:
     
     def get_message_content(self, message):
         """Extract and decode email content from a message."""
-        if 'payload' not in message:
+        try:
+            if 'payload' not in message:
+                return {
+                    'id': message['id'],
+                    'thread_id': message['threadId'],
+                    'snippet': message.get('snippet', ''),
+                    'subject': 'No Subject',
+                    'sender': 'Unknown',
+                    'date': '',
+                    'body_text': '',
+                    'body_html': '',
+                    'labels': message.get('labelIds', [])
+                }
+        except Exception as e:
+            print(f"Error processing message: {e}")
+            # Return a minimal default structure if message is invalid
             return {
-                'id': message['id'],
-                'thread_id': message['threadId'],
+                'id': message.get('id', 'unknown'),
+                'thread_id': message.get('threadId', 'unknown'),
                 'snippet': message.get('snippet', ''),
-                'subject': 'No Subject',
+                'subject': 'Error Processing Message',
                 'sender': 'Unknown',
                 'date': '',
-                'body_text': '',
+                'body_text': f'Error processing this message: {str(e)}',
                 'body_html': '',
                 'labels': message.get('labelIds', [])
             }
@@ -164,28 +180,58 @@ class GmailService:
     
     def get_recent_emails(self, count=100):
         """Get the most recent emails with full content."""
-        # List recent messages
-        messages = self.list_messages(max_results=count)
-        
-        # Fetch full content for each message
-        emails = []
-        for msg in messages:
-            full_msg = self.get_message(msg['id'])
-            email_content = self.get_message_content(full_msg)
-            emails.append(email_content)
-        
-        return emails
+        try:
+            # List recent messages
+            messages = self.list_messages(max_results=count)
+            
+            if not messages:
+                print("No messages found in the inbox")
+                return []
+                
+            # Fetch full content for each message
+            emails = []
+            for msg in messages:
+                try:
+                    full_msg = self.get_message(msg['id'])
+                    email_content = self.get_message_content(full_msg)
+                    emails.append(email_content)
+                except Exception as e:
+                    print(f"Error processing message {msg.get('id', 'unknown')}: {e}")
+                    # Continue with other messages rather than failing completely
+                    continue
+            
+            print(f"Successfully processed {len(emails)} out of {len(messages)} messages")
+            return emails
+        except Exception as e:
+            print(f"Error getting recent emails: {e}")
+            # Return empty list rather than failing
+            return []
     
     def search_emails(self, query, count=30):
         """Search emails with a specific query and get full content."""
-        # List messages matching the query
-        messages = self.list_messages(query=query, max_results=count)
-        
-        # Fetch full content for each message
-        emails = []
-        for msg in messages:
-            full_msg = self.get_message(msg['id'])
-            email_content = self.get_message_content(full_msg)
-            emails.append(email_content)
-        
-        return emails
+        try:
+            # List messages matching the query
+            messages = self.list_messages(query=query, max_results=count)
+            
+            if not messages:
+                print(f"No messages found matching query: {query}")
+                return []
+                
+            # Fetch full content for each message
+            emails = []
+            for msg in messages:
+                try:
+                    full_msg = self.get_message(msg['id'])
+                    email_content = self.get_message_content(full_msg)
+                    emails.append(email_content)
+                except Exception as e:
+                    print(f"Error processing message {msg.get('id', 'unknown')}: {e}")
+                    # Continue with other messages rather than failing completely
+                    continue
+            
+            print(f"Successfully processed {len(emails)} out of {len(messages)} messages for query: {query}")
+            return emails
+        except Exception as e:
+            print(f"Error searching emails with query '{query}': {e}")
+            # Return empty list rather than failing
+            return []
